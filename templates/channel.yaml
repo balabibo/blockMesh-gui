@@ -1,0 +1,49 @@
+# Channel Flow Template
+# Simple channel flow with inlet and outlet
+
+name: Channel
+description: Simple channel flow case. Inlet at xMin, outlet at xMax. Top/bottom walls.
+
+domain:
+  x:
+    min: 0.0
+    max: 5.0
+  y:
+    min: 0.0
+    max: 1.0
+  z:
+    min: 0.0
+    max: 0.5
+
+n_x: 50
+n_y: 20
+n_z: 1
+
+grading_x: 1.0
+grading_y: 1.0
+grading_z: 1.0
+
+scale: 1.0
+
+boundaries:
+  - name: inlet
+    type: patch
+    faces:
+      - [0, 4, 7, 3]  # xMin
+  - name: outlet
+    type: patch
+    faces:
+      - [2, 6, 5, 1]  # xMax
+  - name: bottom
+    type: wall
+    faces:
+      - [1, 5, 4, 0]  # yMin
+  - name: top
+    type: wall
+    faces:
+      - [3, 7, 6, 2]  # yMax
+  - name: frontAndBack
+    type: empty
+    faces:
+      - [0, 3, 2, 1]  # zMin
+      - [4, 5, 6, 7]  # zMax

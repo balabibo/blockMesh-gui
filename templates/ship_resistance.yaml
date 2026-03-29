@@ -1,0 +1,52 @@
+name: ship_resistance
+description: numerical tank for ship resistance.
+domain:
+  x:
+    min: -1.0
+    max: 4.0
+  y:
+    min: -1.0
+    max: 1.0
+  z:
+    min: -1.0
+    max: 0.5
+scale: 1.0
+x_segments:
+- name: inlet
+  length: 1.0
+  n_cells: 20
+  grading: 1.0
+- name: ship
+  length: 1.0
+  n_cells: 20
+  grading: 1.0
+- name: last
+  length: 3.0
+  n_cells: 20
+  grading: 1.0
+y_segments:
+- name: segment1
+  length: 0.8
+  n_cells: 5
+  grading: 1.0
+- name: ship
+  length: 0.4
+  n_cells: 10
+  grading: 1.0
+- name: last
+  length: 0.8
+  n_cells: 5
+  grading: 1.0
+z_segments:
+- name: bottom
+  length: 0.995
+  n_cells: 10
+  grading: 1.0
+- name: waterline
+  length: 0.01
+  n_cells: 21
+  grading: 1.0
+- name: last
+  length: 0.495
+  n_cells: 5
+  grading: 1.0

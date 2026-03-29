@@ -1,0 +1,39 @@
+# Segmented Channel Template
+# Channel with three segments: inlet, simulation, outlet
+# Different mesh densities in each segment
+
+name: Segmented Channel
+description: Channel with three segments - inlet (dense), simulation zone, outlet (coarse). Demonstrates mesh density control.
+
+domain:
+  x:
+    min: 0.0
+    max: 10.0
+  y:
+    min: 0.0
+    max: 1.0
+  z:
+    min: 0.0
+    max: 0.5
+
+x_segments:
+  - name: inlet
+    length: 2.0
+    n_cells: 30
+    grading: 1.0
+  - name: simulation
+    length: 5.0
+    n_cells: 50
+    grading: 1.0
+  - name: outlet
+    length: 3.0
+    n_cells: 20
+    grading: 1.0
+
+n_y: 20
+n_z: 1
+
+grading_y: 1.0
+grading_z: 1.0
+
+scale: 1.0

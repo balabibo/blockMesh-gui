@@ -1,0 +1,48 @@
+# Multi-Segment 3D Template
+# 3D mesh with segments in all three directions
+
+name: Multi-Segment 3D
+description: 3D mesh with 2 segments in each direction (2x2x2 = 8 blocks). Demonstrates multi-directional segmentation.
+
+domain:
+  x:
+    min: 0.0
+    max: 1.0
+  y:
+    min: 0.0
+    max: 1.0
+  z:
+    min: 0.0
+    max: 1.0
+
+x_segments:
+  - name: front
+    length: 0.5
+    n_cells: 10
+    grading: 1.0
+  - name: back
+    length: 0.5
+    n_cells: 10
+    grading: 1.0
+
+y_segments:
+  - name: bottom
+    length: 0.5
+    n_cells: 10
+    grading: 1.0
+  - name: top
+    length: 0.5
+    n_cells: 10
+    grading: 1.0
+
+z_segments:
+  - name: lower
+    length: 0.5
+    n_cells: 10
+    grading: 1.0
+  - name: upper
+    length: 0.5
+    n_cells: 10
+    grading: 1.0
+
+scale: 1.0
