@@ -71,7 +71,7 @@ def export_config(config: MeshConfig, filepath: Union[str, Path]) -> Path:
         data['n_z'] = config.n_z
         data['grading_z'] = config.grading_z
     
-    # Boundaries (only for single block, segmented uses auto-generation)
+    # Boundaries for single block mode
     if not config.use_segments and config.boundaries:
         data['boundaries'] = [
             {
@@ -81,6 +81,16 @@ def export_config(config: MeshConfig, filepath: Union[str, Path]) -> Path:
             }
             for b in config.boundaries
         ]
+    
+    # Boundary custom names and types for segmented mode
+    if config.use_segments:
+        if config.boundary_names:
+            data['boundary_names'] = config.boundary_names
+        if config.boundary_types:
+            data['boundary_types'] = {
+                k: v.value if isinstance(v, BoundaryType) else v
+                for k, v in config.boundary_types.items()
+            }
     
     # Write YAML file
     filepath.parent.mkdir(parents=True, exist_ok=True)
@@ -163,6 +173,16 @@ def import_config(filepath: Union[str, Path]) -> MeshConfig:
             )
             for b in boundaries_data
         ]
+    
+    # Load boundary custom names and types for segmented mode
+    if config.use_segments:
+        config.boundary_names = data.get('boundary_names', {})
+        boundary_types_data = data.get('boundary_types', {})
+        if boundary_types_data:
+            config.boundary_types = {
+                k: BoundaryType(v) if isinstance(v, str) else v
+                for k, v in boundary_types_data.items()
+            }
     
     return config
 

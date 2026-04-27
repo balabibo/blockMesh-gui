@@ -12,6 +12,14 @@ from .mesh_data import MeshConfig, Boundary, BoundaryType, Segment
 class BlockMeshDictGenerator:
     """Generates blockMeshDict files"""
     
+    # Tolerance for floating point comparisons
+    FLOAT_TOLERANCE = 1e-6
+    
+    @staticmethod
+    def _float_eq(a: float, b: float) -> bool:
+        """Compare two floats with tolerance"""
+        return abs(a - b) < BlockMeshDictGenerator.FLOAT_TOLERANCE
+    
     HEADER = """/*--------------------------------*- C++ -*----------------------------------*\\
 | =========                 |                                                 |
 | \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
@@ -217,6 +225,25 @@ scale   {scale};
         lines.append(");")
         return "\n".join(lines)
     
+    def _collect_all_boundary_faces(self, block_defs: List[dict]) -> List[Tuple[int, int, int, int]]:
+        """Collect all external boundary faces for overset boundary"""
+        all_faces = []
+        for block in block_defs:
+            v = block['vertex_indices']
+            if self._float_eq(block['x_range'][0], self.config.x_min):
+                all_faces.append((v[0], v[4], v[7], v[3]))
+            if self._float_eq(block['x_range'][1], self.config.x_max):
+                all_faces.append((v[1], v[2], v[6], v[5]))
+            if self._float_eq(block['y_range'][0], self.config.y_min):
+                all_faces.append((v[0], v[1], v[5], v[4]))
+            if self._float_eq(block['y_range'][1], self.config.y_max):
+                all_faces.append((v[2], v[3], v[7], v[6]))
+            if self._float_eq(block['z_range'][0], self.config.z_min):
+                all_faces.append((v[0], v[3], v[2], v[1]))
+            if self._float_eq(block['z_range'][1], self.config.z_max):
+                all_faces.append((v[4], v[5], v[6], v[7]))
+        return all_faces
+
     def _generate_segmented_blocks(self, block_defs: List[dict]) -> str:
         """Generate blocks section for segmented mesh"""
         lines = ["blocks"]
@@ -243,6 +270,15 @@ scale   {scale};
         lines = ["boundary"]
         lines.append("(")
         
+        # If single overset boundary is defined, collect all faces and merge into one entry
+        if len(self.config.boundaries) == 1 and self.config.boundaries[0].boundary_type == BoundaryType.OVERSET:
+            all_faces = self._collect_all_boundary_faces(block_defs)
+            merged = self.config.boundaries[0]
+            merged.faces = all_faces
+            lines.append(self._format_boundary(merged))
+            lines.append(");")
+            return "\n".join(lines)
+        
         # Collect boundary faces
         boundaries_to_add = []
         
@@ -254,7 +290,7 @@ scale   {scale};
         # X-min boundary (only blocks with minimum X)
         x_min_faces = []
         for block in block_defs:
-            if block['x_range'][0] == self.config.x_min:
+            if self._float_eq(block['x_range'][0], self.config.x_min):
                 v = block['vertex_indices']
                 # xMin face: vertices 0,4,7,3 (normal points in -X direction)
                 x_min_faces.append((v[0], v[4], v[7], v[3]))
@@ -269,7 +305,7 @@ scale   {scale};
         # X-max boundary (only blocks with maximum X)
         x_max_faces = []
         for block in block_defs:
-            if block['x_range'][1] == self.config.x_max:
+            if self._float_eq(block['x_range'][1], self.config.x_max):
                 v = block['vertex_indices']
                 # xMax face: vertices 1,2,6,5 (normal points in +X direction)
                 x_max_faces.append((v[1], v[2], v[6], v[5]))
@@ -284,7 +320,7 @@ scale   {scale};
         # Y-min boundary (only blocks with minimum Y)
         y_min_faces = []
         for block in block_defs:
-            if block['y_range'][0] == self.config.y_min:
+            if self._float_eq(block['y_range'][0], self.config.y_min):
                 v = block['vertex_indices']
                 # yMin face: vertices 0,1,5,4 (normal points in -Y direction)
                 y_min_faces.append((v[0], v[1], v[5], v[4]))
@@ -299,7 +335,7 @@ scale   {scale};
         # Y-max boundary (only blocks with maximum Y)
         y_max_faces = []
         for block in block_defs:
-            if block['y_range'][1] == self.config.y_max:
+            if self._float_eq(block['y_range'][1], self.config.y_max):
                 v = block['vertex_indices']
                 # yMax face: vertices 2,3,7,6 (normal points in +Y direction)
                 y_max_faces.append((v[2], v[3], v[7], v[6]))
@@ -314,7 +350,7 @@ scale   {scale};
         # Z-min boundary (only blocks with minimum Z)
         z_min_faces = []
         for block in block_defs:
-            if block['z_range'][0] == self.config.z_min:
+            if self._float_eq(block['z_range'][0], self.config.z_min):
                 v = block['vertex_indices']
                 # zMin face: vertices 0,3,2,1 (normal points in -Z direction)
                 z_min_faces.append((v[0], v[3], v[2], v[1]))
@@ -329,7 +365,7 @@ scale   {scale};
         # Z-max boundary (only blocks with maximum Z)
         z_max_faces = []
         for block in block_defs:
-            if block['z_range'][1] == self.config.z_max:
+            if self._float_eq(block['z_range'][1], self.config.z_max):
                 v = block['vertex_indices']
                 # zMax face: vertices 4,5,6,7 (normal points in +Z direction)
                 z_max_faces.append((v[4], v[5], v[6], v[7]))
@@ -341,25 +377,37 @@ scale   {scale};
             'faces': z_max_faces,
         })
         
-        # Ensure all 6 boundaries are present (add empty ones if missing)
-        required_boundaries = ["xMin", "xMax", "yMin", "yMax", "zMin", "zMax"]
-        for req_name in required_boundaries:
-            found = False
-            for b in boundaries_to_add:
-                if b['name'] == req_name:
-                    found = True
-                    break
-            
-            if not found:
-                boundaries_to_add.append({
-                    'name': req_name,
-                    'type': BoundaryType.WALL,
-                    'faces': [],
-                })
+        # Track which default boundaries have been handled
+        handled_defaults = set()
         
-        # Format all boundaries
+        # Format all boundaries and track which defaults were handled
         for b in boundaries_to_add:
+            b_name = b['name']
+            
+            # Check if this boundary is a renamed version of a default
+            for default_name in ["xMin", "xMax", "yMin", "yMax", "zMin", "zMax"]:
+                custom_name = self.config.boundary_names.get(default_name)
+                if custom_name:
+                    # User renamed this boundary
+                    if b_name == custom_name:
+                        handled_defaults.add(default_name)
+                else:
+                    # No rename, check by default name
+                    if b_name == default_name:
+                        handled_defaults.add(default_name)
+            
             lines.append(self._format_boundary_dict(b['name'], b['type'], b['faces']))
+        
+        # Only add missing boundaries for defaults that weren't already handled
+        # Skip if user renamed the boundary (they expect a different name)
+        for req_name in ["xMin", "xMax", "yMin", "yMax", "zMin", "zMax"]:
+            if req_name in handled_defaults:
+                continue
+            # Skip if user renamed this boundary (they want a different name)
+            if req_name in self.config.boundary_names:
+                continue
+            # Add empty boundary
+            lines.append(self._format_boundary_dict(req_name, BoundaryType.WALL, []))
         
         lines.append(");")
         return "\n".join(lines)

@@ -43,6 +43,9 @@ class BoundaryType(Enum):
     PROCESSOR = "processor"
     PROCESSOR_CYCLIC = "processorCyclic"
     
+    # Overset
+    OVERSET = "overset"
+    
     # Others
     CALCULATED = "calculated"
     EXTERNAL_WALL = "externalWall"

@@ -315,9 +315,6 @@ class DirectionConfigWidget(QWidget):
         self.remove_btn.hide()
         btn_row.addWidget(self.remove_btn)
         
-        self.total_label = QLabel("")
-        self.total_label.hide()
-        btn_row.addWidget(self.total_label)
         btn_row.addStretch()
         layout.addLayout(btn_row)
         
@@ -354,7 +351,6 @@ class DirectionConfigWidget(QWidget):
             self.segment_table.show()
             self.add_btn.show()
             self.remove_btn.show()
-            self.total_label.show()
             
             # Save original cells count and use it to initialize
             self._original_cells = self.cells_spin.value()
@@ -368,7 +364,6 @@ class DirectionConfigWidget(QWidget):
             self.segment_table.hide()
             self.add_btn.hide()
             self.remove_btn.hide()
-            self.total_label.hide()
     
     def _init_segments(self):
         """Initialize with 2 segments (editable + last auto)"""
@@ -497,8 +492,6 @@ class DirectionConfigWidget(QWidget):
             if cells_item:
                 total_cells += int(cells_item.text())
         
-        self.total_label.setText(f"Total: {total_length:.2f}, {total_cells} cells")
-        
         # Update the main cells spin to show the total
         self.cells_spin.setValue(total_cells)
     
@@ -576,6 +569,10 @@ class MainWindow(QMainWindow):
         super().__init__()
         self.setWindowTitle("blockMesh-gui - OpenFOAM Grid Generator")
         self.setMinimumSize(700, 800)
+        
+        # Remember last save directory
+        self.last_save_dir = Path.cwd()
+        
         self._setup_ui()
         self._connect_signals()
     
@@ -653,6 +650,16 @@ class MainWindow(QMainWindow):
         self.mesh_config = MeshConfigWidget()
         main_layout.addWidget(self.mesh_config)
         
+        # Total cells display
+        total_row = QHBoxLayout()
+        self.total_cells_label = QLabel("Total cells: 0")
+        self.total_cells_label.setStyleSheet(
+            "font-weight: bold; font-size: 15pt; color: #D32F2F; padding: 4px 0;"
+        )
+        total_row.addWidget(self.total_cells_label)
+        total_row.addStretch()
+        main_layout.addLayout(total_row)
+        
         # Boundaries
         boundary_group = QGroupBox("Boundary Conditions")
         boundary_layout = QVBoxLayout(boundary_group)
@@ -662,6 +669,26 @@ class MainWindow(QMainWindow):
             widget = BoundaryConfigWidget(name)
             self.boundary_widgets[name] = widget
             boundary_layout.addWidget(widget)
+        
+        # Overset separator and checkbox
+        overset_sep = QFrame()
+        overset_sep.setFrameShape(QFrame.Shape.HLine)
+        boundary_layout.addWidget(overset_sep)
+        
+        overset_row = QHBoxLayout()
+        self.use_overset_cb = QCheckBox("Use single overset boundary (hide individual boundaries)")
+        overset_row.addWidget(self.use_overset_cb)
+        overset_row.addStretch()
+        boundary_layout.addLayout(overset_row)
+        
+        overset_name_row = QHBoxLayout()
+        overset_name_row.addWidget(QLabel("Overset patch name:"))
+        self.overset_name_edit = QLineEdit("oversetPatch")
+        self.overset_name_edit.setMinimumWidth(150)
+        self.overset_name_edit.hide()
+        overset_name_row.addWidget(self.overset_name_edit)
+        overset_name_row.addStretch()
+        boundary_layout.addLayout(overset_name_row)
         
         main_layout.addWidget(boundary_group)
         
@@ -695,6 +722,13 @@ class MainWindow(QMainWindow):
         self.load_template_btn.clicked.connect(self._on_load_template)
         self.import_btn.clicked.connect(self._on_import)
         self.export_btn.clicked.connect(self._on_export)
+        self.use_overset_cb.stateChanged.connect(self._toggle_overset_mode)
+        
+        # Auto-update total cells on any cell count change
+        for cfg in [self.mesh_config.x_config, self.mesh_config.y_config, self.mesh_config.z_config]:
+            cfg.cells_spin.valueChanged.connect(self._update_total_cells_display)
+            cfg.use_segments_cb.stateChanged.connect(self._update_total_cells_display)
+            cfg.segment_table.cellChanged.connect(self._update_total_cells_display)
     
     def _load_templates(self):
         """Load available templates into combo box with tooltips"""
@@ -739,6 +773,40 @@ class MainWindow(QMainWindow):
             tooltip = self.templates[index - 1].get('description', 'No description')
             self.template_combo.setToolTip(tooltip)
     
+    def _toggle_overset_mode(self, state):
+        """Toggle between individual boundaries and single overset boundary"""
+        is_overset = state == Qt.CheckState.Checked.value
+        for widget in self.boundary_widgets.values():
+            widget.setVisible(not is_overset)
+        self.overset_name_edit.setVisible(is_overset)
+
+    def _update_total_cells_display(self):
+        """Calculate and display total grid cells from current UI state"""
+        try:
+            x_cfg = self.mesh_config.x_config
+            y_cfg = self.mesh_config.y_config
+            z_cfg = self.mesh_config.z_config
+            
+            if x_cfg.use_segments_cb.isChecked():
+                n_x = sum(int(x_cfg.segment_table.item(r, 2).text()) for r in range(x_cfg.segment_table.rowCount()) if x_cfg.segment_table.item(r, 2) and x_cfg.segment_table.item(r, 2).text())
+            else:
+                n_x = x_cfg.cells_spin.value()
+            
+            if y_cfg.use_segments_cb.isChecked():
+                n_y = sum(int(y_cfg.segment_table.item(r, 2).text()) for r in range(y_cfg.segment_table.rowCount()) if y_cfg.segment_table.item(r, 2) and y_cfg.segment_table.item(r, 2).text())
+            else:
+                n_y = y_cfg.cells_spin.value()
+            
+            if z_cfg.use_segments_cb.isChecked():
+                n_z = sum(int(z_cfg.segment_table.item(r, 2).text()) for r in range(z_cfg.segment_table.rowCount()) if z_cfg.segment_table.item(r, 2) and z_cfg.segment_table.item(r, 2).text())
+            else:
+                n_z = z_cfg.cells_spin.value()
+            
+            total = n_x * n_y * n_z
+            self.total_cells_label.setText(f"Total cells: {total}")
+        except Exception:
+            self.total_cells_label.setText("Total cells: ?")
+
     def _get_mesh_config(self) -> MeshConfig:
         """Create MeshConfig from UI - supporting 3D segments"""
         config_data = self.mesh_config.get_config()
@@ -787,9 +855,13 @@ class MainWindow(QMainWindow):
                 scale=config_data['scale'],
             )
         
-        # Boundaries - only set for single block mode
-        # For segmented mesh, boundaries are computed by the generator
-        if not has_any_segments:
+        # Boundaries
+        if self.use_overset_cb.isChecked():
+            overset_name = self.overset_name_edit.text().strip() or "oversetPatch"
+            all_faces = [(0, 4, 7, 3), (2, 6, 5, 1), (1, 5, 4, 0),
+                         (3, 7, 6, 2), (0, 3, 2, 1), (4, 5, 6, 7)]
+            config.boundaries = [Boundary(overset_name, BoundaryType.OVERSET, all_faces)]
+        elif not has_any_segments:
             boundaries = []
             face_indices = {
                 "xMin": [(0, 4, 7, 3)],
@@ -840,10 +912,13 @@ class MainWindow(QMainWindow):
         self.mesh_config.z_config.cells_spin.setValue(1)
         self.mesh_config.z_config.use_segments_cb.setChecked(False)
         
+        self.use_overset_cb.setChecked(False)
+        self.overset_name_edit.setText("oversetPatch")
         for name, widget in self.boundary_widgets.items():
             widget.type_combo.setCurrentText("wall")
             widget.name_edit.setText(name)
         
+        self._update_total_cells_display()
         self.status_bar.showMessage("Reset to defaults", 3000)
     
     def _on_preview(self):
@@ -870,12 +945,16 @@ class MainWindow(QMainWindow):
             config.validate()
             
             file_path, _ = QFileDialog.getSaveFileName(
-                self, "Save blockMeshDict", "blockMeshDict",
+                self, "Save blockMeshDict", 
+                str(self.last_save_dir / "blockMeshDict"),
                 "OpenFOAM Dictionary (blockMeshDict);;All Files (*)"
             )
             
             if not file_path:
                 return
+            
+            # Remember the directory for next time
+            self.last_save_dir = Path(file_path).parent
             
             generator = BlockMeshDictGenerator(config)
             generator.write(file_path)
@@ -906,7 +985,7 @@ class MainWindow(QMainWindow):
     def _on_import(self):
         """Import configuration from YAML file"""
         file_path, _ = QFileDialog.getOpenFileName(
-            self, "Import Configuration", "",
+            self, "Import Configuration", str(self.last_save_dir),
             "YAML Files (*.yaml *.yml);;All Files (*)"
         )
         
@@ -916,6 +995,8 @@ class MainWindow(QMainWindow):
         try:
             config = import_config(file_path)
             self._apply_config_to_ui(config)
+            # Remember the directory for next time
+            self.last_save_dir = Path(file_path).parent
             self.status_bar.showMessage(f"Imported: {file_path}", 5000)
             QMessageBox.information(self, "Success", f"Configuration imported:\n{file_path}")
         except Exception as e:
@@ -927,12 +1008,16 @@ class MainWindow(QMainWindow):
             config = self._get_mesh_config()
             
             file_path, _ = QFileDialog.getSaveFileName(
-                self, "Export Configuration", "mesh_config.yaml",
+                self, "Export Configuration", 
+                str(self.last_save_dir / "mesh_config.yaml"),
                 "YAML Files (*.yaml *.yml);;All Files (*)"
             )
             
             if not file_path:
                 return
+            
+            # Remember the directory for next time
+            self.last_save_dir = Path(file_path).parent
             
             # Add name and description from user input
             config.name = Path(file_path).stem
@@ -998,7 +1083,14 @@ class MainWindow(QMainWindow):
         else:
             self.mesh_config.z_config.use_segments_cb.setChecked(False)
         
-        # Boundaries (only for single block)
+        # Detect overset mode (single boundary with type OVERSET)
+        is_overset = False
+        if len(config.boundaries) == 1 and config.boundaries[0].boundary_type == BoundaryType.OVERSET:
+            is_overset = True
+            self.use_overset_cb.setChecked(True)
+            self.overset_name_edit.setText(config.boundaries[0].name)
+
+        # Boundaries for single block mode
         if not config.use_segments and config.boundaries:
             for boundary in config.boundaries:
                 # Map boundary name to face
@@ -1016,6 +1108,17 @@ class MainWindow(QMainWindow):
                         if widget:
                             widget.type_combo.setCurrentText(boundary.boundary_type.value)
                             widget.name_edit.setText(boundary.name)
+
+        # Boundaries for segmented mode (restore custom names/types)
+        if config.use_segments and not is_overset:
+            for face_name, widget in self.boundary_widgets.items():
+                if face_name in config.boundary_names:
+                    widget.name_edit.setText(config.boundary_names[face_name])
+                if face_name in config.boundary_types:
+                    bt = config.boundary_types[face_name]
+                    widget.type_combo.setCurrentText(bt.value if isinstance(bt, BoundaryType) else bt)
+        
+        self._update_total_cells_display()
 
 
 def main():
